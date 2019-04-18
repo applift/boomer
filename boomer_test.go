@@ -105,8 +105,12 @@ func TestCreateRatelimiter(t *testing.T) {
 }
 
 func TestRecordSuccess(t *testing.T) {
-	defaultBoomer = NewBoomer("127.0.0.1", 5557)
-	defaultBoomer.runner = newRunner(nil, nil, "asap")
+	defaultBoomer = return &Boomer{
+		masterHost: masterHost,
+		masterPort: masterPort,
+		hatchType:  "asap",
+	}
+	defaultBoomer.runner = newMasterRunner(nil, nil, "asap")
 	RecordSuccess("http", "foo", int64(1), int64(10))
 
 	requestSuccessMsg := <-defaultBoomer.runner.stats.requestSuccessChan

@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/asaskevich/EventBus"
 )
@@ -15,32 +14,14 @@ import (
 // Events is the global event bus instance.
 var Events = EventBus.New()
 
-var defaultBoomer = &Boomer{}
+var defaultBoomer *Boomer
 
 // A Boomer is used to run tasks.
 // This type is exposed, so users can create and control a Boomer instance programmatically.
 type Boomer struct {
-	masterHost string
-	masterPort int
-
 	hatchType   string
 	rateLimiter RateLimiter
-	runner      *runner
-}
-
-// NewBoomer returns a new Boomer.
-func NewBoomer(masterHost string, masterPort int) *Boomer {
-	return &Boomer{
-		masterHost: masterHost,
-		masterPort: masterPort,
-		hatchType:  "asap",
-	}
-}
-
-// SetRateLimiter allows user to use their own rate limiter.
-// It must be called before the test is started.
-func (b *Boomer) SetRateLimiter(rateLimiter RateLimiter) {
-	b.rateLimiter = rateLimiter
+	runner      Runner
 }
 
 // SetHatchType only accepts "asap" or "smooth".
@@ -54,15 +35,8 @@ func (b *Boomer) SetHatchType(hatchType string) {
 	b.hatchType = hatchType
 }
 
-func (b *Boomer) setRunner(runner *runner) {
-	b.runner = runner
-}
-
 // Run accepts a slice of Task and connects to the locust master.
 func (b *Boomer) Run(tasks ...*Task) {
-	b.runner = newRunner(tasks, b.rateLimiter, b.hatchType)
-	b.runner.masterHost = b.masterHost
-	b.runner.masterPort = b.masterPort
 	b.runner.run()
 }
 
@@ -71,12 +45,7 @@ func (b *Boomer) RecordSuccess(requestType, name string, responseTime int64, res
 	if b.runner == nil {
 		return
 	}
-	b.runner.stats.requestSuccessChan <- &requestSuccess{
-		requestType:    requestType,
-		name:           name,
-		responseTime:   responseTime,
-		responseLength: responseLength,
-	}
+	b.runner.recordSuccess(requestType, name, responseTime, responseLength)
 }
 
 // RecordFailure reports a failure.
@@ -84,28 +53,12 @@ func (b *Boomer) RecordFailure(requestType, name string, responseTime int64, exc
 	if b.runner == nil {
 		return
 	}
-	b.runner.stats.requestFailureChan <- &requestFailure{
-		requestType:  requestType,
-		name:         name,
-		responseTime: responseTime,
-		error:        exception,
-	}
+	b.runner.recordFailure(requestType, name, responseTime, exception)
 }
 
 // Quit will send a quit message to the master.
 func (b *Boomer) Quit() {
 	Events.Publish("boomer:quit")
-	var ticker = time.NewTicker(3 * time.Second)
-
-	// wait for quit message is sent to master
-	select {
-	case <-b.runner.client.disconnectedChannel():
-		break
-	case <-ticker.C:
-		log.Println("Timeout waiting for sending quit message to master, boomer will quit any way.")
-		break
-	}
-
 	b.runner.close()
 }
 
@@ -128,7 +81,16 @@ func runTasksForTest(tasks ...*Task) {
 
 // Run accepts a slice of Task and connects to a locust master.
 // It's a convenience function to use the defaultBoomer.
-func Run(tasks ...*Task) {
+func Run(r Runner, tasks ...*Task) {
+	if r == nil {
+		r = NewMasterRunner(tasks...)
+	}
+
+	defaultBoomer = &Boomer{
+		runner:    r,
+		hatchType: "asap",
+	}
+
 	if !flag.Parsed() {
 		flag.Parse()
 	}
@@ -148,13 +110,6 @@ func Run(tasks ...*Task) {
 		StartCPUProfile(cpuProfile, cpuProfileDuration)
 	}
 
-	rateLimiter, err := createRateLimiter(maxRPS, requestIncreaseRate)
-	if err != nil {
-		log.Fatalf("%v\n", err)
-	}
-	defaultBoomer.SetRateLimiter(rateLimiter)
-	defaultBoomer.masterHost = masterHost
-	defaultBoomer.masterPort = masterPort
 	defaultBoomer.hatchType = hatchType
 
 	defaultBoomer.Run(tasks...)
