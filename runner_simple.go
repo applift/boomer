@@ -68,7 +68,13 @@ func logStats(stats map[string]interface{}) {
 		count++
 		total += v
 	}
-	avgReqPerSec := total / count
+
+	var avgReqPerSec int64
+	if count == 0 {
+		avgReqPerSec = 0
+	} else {
+		avgReqPerSec = total / count
+	}
 
 	var respTimes = statsTotal["response_times"].(map[int64]int64)
 
@@ -78,7 +84,12 @@ func logStats(stats map[string]interface{}) {
 		count += v
 		total += (v * k)
 	}
-	avgRespTime := total / count
+	var avgRespTime int64
+	if count == 0 {
+		avgRespTime = 0
+	} else {
+		avgRespTime = total / count
+	}
 
 	fmt.Println("Current request rate:", avgReqPerSec, ", avg response time:", avgRespTime, "ms")
 }

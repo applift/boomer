@@ -132,6 +132,11 @@ func Run(r Runner, tasks ...*Task) {
 	log.Println("shut down")
 }
 
+//convenience function for the defaultBoomer.
+func Quit() {
+	defaultBoomer.Quit()
+}
+
 // RecordSuccess reports a success.
 // It's a convenience function to use the defaultBoomer.
 func RecordSuccess(requestType, name string, responseTime int64, responseLength int64) {
