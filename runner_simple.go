@@ -55,7 +55,7 @@ func (r *SimpleRunner) run() {
 
 		r.stopChan = make(chan bool)
 
-		go r.spawnWorkers()
+		r.spawnWorkers()
 	}
 }
 
@@ -84,29 +84,14 @@ func logStats(stats map[string]interface{}) {
 		avgReqPerSec = total / count
 	}
 
-	var respTimes = statsTotal["response_times"].(map[int64]int64)
-
-	total = 0
-	count = 0
-	for k, v := range respTimes {
-		count += v
-		total += (v * k)
-	}
 	var avgRespTime int64
-	if count == 0 {
+	if statsTotal["num_requests"].(int64) == 0 {
 		avgRespTime = 0
 	} else {
-		avgRespTime = total / count
+		avgRespTime = statsTotal["total_response_time"].(int64) / statsTotal["num_requests"].(int64)
 	}
 
-	var fromTotalAvgRespTime int64
-	if statsTotal["num_requests"].(int64) == 0 {
-		fromTotalAvgRespTime = 0
-	} else {
-		fromTotalAvgRespTime = statsTotal["total_response_time"].(int64) / statsTotal["num_requests"].(int64)
-	}
-
-	fmt.Println("Current request rate:", avgReqPerSec, ", avg response time:", avgRespTime, "ms, (", fromTotalAvgRespTime, "ms)")
+	fmt.Println("Current request rate:", avgReqPerSec, ", avg response time:", avgRespTime, "ms")
 }
 
 func (r *SimpleRunner) recordSuccess(requestType, name string, responseTime int64, responseLength int64) {
@@ -128,50 +113,46 @@ func (r *SimpleRunner) recordFailure(requestType, name string, responseTime int6
 }
 
 func (r *SimpleRunner) spawnWorkers() {
-	workers := r.getMaxWorkers()
-
-	weightSum := 0
-	for _, task := range r.tasks {
-		weightSum += task.Weight
+	workerCount := r.getMaxWorkers()
+	jobs := make(chan func(), workerCount*2)
+	for w := 1; w <= workerCount; w++ {
+		go r.worker(jobs)
 	}
 
-	for _, task := range r.tasks {
-		percent := float64(task.Weight) / float64(weightSum)
-		workersForTask := int64(round(workers*percent, .5, 0))
-
-		if weightSum == 0 {
-			workersForTask = int64(workers / float64(len(r.tasks)))
-		}
-
-		for i := int64(1); i <= workersForTask; i++ {
-			if i%r.requestRate == 0 {
-				time.Sleep(1 * time.Second)
-			}
-
+	//task loop inside another go routine so as not to block,
+	//waiting is done inside Boomer
+	go func() {
+		numTasks := len(r.tasks)
+		currentTask := 0
+		currentTaskCount := 0
+		for {
 			select {
 			case <-r.stopChan:
-				// quit hatching goroutine
+				// quit sending tasks to worker pool
 				return
 			default:
-				go func(fn func()) {
-					for {
-						select {
-						case <-r.stopChan:
-							return
-						default:
-							blocked := r.rateLimiter.Acquire()
-							if !blocked {
-								safeRun(fn)
-							}
-						}
-					}
-				}(task.Fn)
+				task := r.tasks[currentTask]
+				//wait for rate limiter if necessary
+				r.rateLimiter.Acquire()
+				jobs <- task.Fn
+
+				currentTaskCount++
+				if currentTaskCount%task.Weight == 0 {
+					currentTask = (currentTask + 1) % numTasks
+					currentTaskCount = 0
+				}
 			}
 		}
+	}()
+}
+
+func (r *SimpleRunner) worker(jobs <-chan func()) {
+	for fn := range jobs {
+		safeRun(fn)
 	}
 }
 
-func (r *SimpleRunner) getMaxWorkers() (workers float64) {
+func (r *SimpleRunner) getMaxWorkers() (workers int) {
 	var rLimit syscall.Rlimit
 	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 	if err != nil {
@@ -179,9 +160,9 @@ func (r *SimpleRunner) getMaxWorkers() (workers float64) {
 	}
 
 	if r.maxWorkers > 0 {
-		workers = math.Min(float64(r.maxWorkers), float64(r.requestRate))
+		workers = int(math.Min(float64(r.maxWorkers), float64(r.requestRate)))
 	}
-	workers = math.Min(workers, float64(rLimit.Cur-(rLimit.Cur/4)))
+	workers = int(math.Min(float64(workers), float64(rLimit.Cur-(rLimit.Cur/4))))
 	log.Println("Spawning", workers, "workers to maintain", r.requestRate, "requests/s...")
 	return
 }
