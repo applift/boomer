@@ -15,6 +15,7 @@ import (
 var masterHost string
 var masterPort int
 var maxRPS int64
+var maxWorkers int64
 var requestIncreaseRate string
 var hatchType string
 var runTasks string
@@ -79,6 +80,7 @@ func initLegacyEventHandlers() {
 
 func init() {
 	flag.Int64Var(&maxRPS, "max-rps", 0, "Max RPS that boomer can generate, disabled by default.")
+	flag.Int64Var(&maxWorkers, "max-workers", 0, "Maximum number of worker routines to spawn, by default will try and match max-rps.")
 	flag.StringVar(&requestIncreaseRate, "request-increase-rate", "-1", "Request increase rate, disabled by default.")
 	flag.StringVar(&hatchType, "hatch-type", "asap", "How to create goroutines according to hatch rate, 'asap' will do it as soon as possible while 'smooth' means a constant pace.")
 	flag.StringVar(&runTasks, "run-tasks", "", "Run tasks without connecting to the master, multiply tasks is separated by comma. Usually, it's for debug purpose.")

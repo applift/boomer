@@ -14,6 +14,7 @@ type SimpleRunner struct {
 	rateLimiter RateLimiter
 	stats       *requestStats
 	requestRate int64
+	maxWorkers  int64
 	stopChan    chan bool
 }
 
@@ -23,6 +24,7 @@ func NewSimpleRunner(tasks []*Task) *Runner {
 		rateLimiter: NewStableRateLimiter(maxRPS, time.Second),
 		stats:       newRequestStats(),
 		requestRate: maxRPS,
+		maxWorkers:  maxWorkers,
 		stopChan:    make(chan bool),
 	}
 	return &r
@@ -58,6 +60,12 @@ func (r *SimpleRunner) run() {
 }
 
 func logStats(stats map[string]interface{}) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from crash while logging", r)
+		}
+	}()
 
 	var statsTotal = stats["stats_total"].(map[string]interface{})
 	var reqPerSec = statsTotal["num_reqs_per_sec"].(map[int64]int64)
@@ -113,15 +121,7 @@ func (r *SimpleRunner) recordFailure(requestType, name string, responseTime int6
 }
 
 func (r *SimpleRunner) spawnWorkers() {
-	var rLimit syscall.Rlimit
-	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
-	if err != nil {
-		panic(fmt.Sprintf("Error Getting Rlimit: %s", err))
-	}
-
-	workers := math.Min(float64(r.requestRate), float64(rLimit.Cur-(rLimit.Cur/4)))
-
-	log.Println("Spawning", workers, "workers to maintain", r.requestRate, "requests/s...")
+	workers := r.getMaxWorkers()
 
 	weightSum := 0
 	for _, task := range r.tasks {
@@ -130,10 +130,10 @@ func (r *SimpleRunner) spawnWorkers() {
 
 	for _, task := range r.tasks {
 		percent := float64(task.Weight) / float64(weightSum)
-		workersForTask := int64(round(float64(workers)*percent, .5, 0))
+		workersForTask := int64(round(workers*percent, .5, 0))
 
 		if weightSum == 0 {
-			workersForTask = int64(float64(workers) / float64(len(r.tasks)))
+			workersForTask = int64(workers / float64(len(r.tasks)))
 		}
 
 		for i := int64(1); i <= workersForTask; i++ {
@@ -162,6 +162,21 @@ func (r *SimpleRunner) spawnWorkers() {
 			}
 		}
 	}
+}
+
+func (r *SimpleRunner) getMaxWorkers() (workers float64) {
+	var rLimit syscall.Rlimit
+	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		panic(fmt.Sprintf("Error Getting Rlimit: %s", err))
+	}
+
+	if r.maxWorkers > 0 {
+		workers = math.Min(float64(r.maxWorkers), float64(r.requestRate))
+	}
+	workers = math.Min(workers, float64(rLimit.Cur-(rLimit.Cur/4)))
+	log.Println("Spawning", workers, "workers to maintain", r.requestRate, "requests/s...")
+	return
 }
 
 func (r *SimpleRunner) stop() {
