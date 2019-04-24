@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"syscall"
 	"time"
@@ -122,25 +123,16 @@ func (r *SimpleRunner) spawnWorkers() {
 	//task loop inside another go routine so as not to block,
 	//waiting is done inside Boomer
 	go func() {
-		numTasks := len(r.tasks)
-		currentTask := 0
-		currentTaskCount := 0
 		for {
 			select {
 			case <-r.stopChan:
 				// quit sending tasks to worker pool
 				return
 			default:
-				task := r.tasks[currentTask]
+				task := r.pickWeightedRandomTask()
 				//wait for rate limiter if necessary
 				r.rateLimiter.Acquire()
 				jobs <- task.Fn
-
-				currentTaskCount++
-				if currentTaskCount%task.Weight == 0 {
-					currentTask = (currentTask + 1) % numTasks
-					currentTaskCount = 0
-				}
 			}
 		}
 	}()
@@ -150,6 +142,24 @@ func (r *SimpleRunner) worker(jobs <-chan func()) {
 	for fn := range jobs {
 		safeRun(fn)
 	}
+}
+
+func (r *SimpleRunner) pickWeightedRandomTask() *Task {
+	weightSum := 0
+	for _, t := range r.tasks {
+		weightSum += t.Weight
+	}
+
+	remainingWeight := rand.Intn(weightSum)
+
+	var task *Task
+	for _, t := range r.tasks {
+		if remainingWeight = remainingWeight - t.Weight; remainingWeight <= 0 {
+			task = t
+			break
+		}
+	}
+	return task
 }
 
 func (r *SimpleRunner) getMaxWorkers() (workers int) {
