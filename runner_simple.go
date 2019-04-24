@@ -60,7 +60,7 @@ func (r *SimpleRunner) run() {
 	}
 }
 
-func (r *SimpleRunner) logStats(stats map[string]*statsEntry) {
+func (r *SimpleRunner) logStats(stats map[string]statsEntry) {
 
 	defer func() {
 		if r := recover(); r != nil {

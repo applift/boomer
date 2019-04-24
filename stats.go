@@ -27,7 +27,7 @@ type requestStats struct {
 	requestSuccessChan  chan *requestSuccess
 	requestFailureChan  chan *requestFailure
 	clearStatsChan      chan bool
-	messageToRunnerChan chan map[string]*statsEntry
+	messageToRunnerChan chan map[string]statsEntry
 	shutdownChan        chan bool
 }
 
@@ -42,7 +42,7 @@ func newRequestStats() (stats *requestStats) {
 	stats.requestSuccessChan = make(chan *requestSuccess, 100)
 	stats.requestFailureChan = make(chan *requestFailure, 100)
 	stats.clearStatsChan = make(chan bool)
-	stats.messageToRunnerChan = make(chan map[string]*statsEntry, 10)
+	stats.messageToRunnerChan = make(chan map[string]statsEntry, 10)
 	stats.shutdownChan = make(chan bool)
 
 	stats.total = &statsEntry{
@@ -118,10 +118,14 @@ func (s *requestStats) start() {
 				s.clearAll()
 			case <-ticker.C:
 				// send data to channel, no network IO in this goroutine
-				s.messageToRunnerChan <- s.entries
+				var entries = make(map[string]statsEntry)
 				for _, v := range s.entries {
+					if !(v.numRequests == 0 && v.numFailures == 0) {
+						entries[v.name] = *v
+					}
 					v.reset()
 				}
+				s.messageToRunnerChan <- entries
 				s.total.reset()
 				s.errors = make(map[string]*statsError)
 			case <-s.shutdownChan:
