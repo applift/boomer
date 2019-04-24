@@ -70,6 +70,7 @@ func (r *SimpleRunner) logStats(stats map[string]interface{}) {
 
 	for _, sts := range stats {
 		println(stats)
+
 		var stsMap = sts.(map[string]interface{})
 		var reqPerSec = stsMap["num_reqs_per_sec"].(map[int64]int64)
 
