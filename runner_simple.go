@@ -60,7 +60,7 @@ func (r *SimpleRunner) run() {
 	}
 }
 
-func (r *SimpleRunner) logStats(stats map[string]interface{}) {
+func (r *SimpleRunner) logStats(stats map[string]*statsEntry) {
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -69,10 +69,8 @@ func (r *SimpleRunner) logStats(stats map[string]interface{}) {
 	}()
 
 	for _, sts := range stats {
-		println(stats)
 
-		var stsMap = sts.(map[string]interface{})
-		var reqPerSec = stsMap["num_reqs_per_sec"].(map[int64]int64)
+		var reqPerSec = sts.numReqsPerSec
 
 		var total int64
 		var count int64
@@ -89,13 +87,13 @@ func (r *SimpleRunner) logStats(stats map[string]interface{}) {
 		}
 
 		var avgRespTime int64
-		if stsMap["num_requests"].(int64) == 0 {
+		if sts.numRequests == 0 {
 			avgRespTime = 0
 		} else {
-			avgRespTime = stsMap["total_response_time"].(int64) / stsMap["num_requests"].(int64)
+			avgRespTime = sts.totalResponseTime / sts.numRequests
 		}
 
-		fmt.Printf("%s: request rate: %d, avg response time: %d", stsMap["name"], avgReqPerSec, avgRespTime)
+		fmt.Printf("%s: request rate: %d, avg response time: %d", sts.name, avgReqPerSec, avgRespTime)
 	}
 }
 

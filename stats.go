@@ -24,11 +24,11 @@ type requestStats struct {
 	total     *statsEntry
 	startTime int64
 
-	requestSuccessChan chan *requestSuccess
-	requestFailureChan chan *requestFailure
-	clearStatsChan     chan bool
-	messageToRunnerChan    chan map[string]interface{}
-	shutdownChan       chan bool
+	requestSuccessChan  chan *requestSuccess
+	requestFailureChan  chan *requestFailure
+	clearStatsChan      chan bool
+	messageToRunnerChan chan map[string]*statsEntry
+	shutdownChan        chan bool
 }
 
 func newRequestStats() (stats *requestStats) {
@@ -42,7 +42,7 @@ func newRequestStats() (stats *requestStats) {
 	stats.requestSuccessChan = make(chan *requestSuccess, 100)
 	stats.requestFailureChan = make(chan *requestFailure, 100)
 	stats.clearStatsChan = make(chan bool)
-	stats.messageToRunnerChan = make(chan map[string]interface{}, 10)
+	stats.messageToRunnerChan = make(chan map[string]*statsEntry, 10)
 	stats.shutdownChan = make(chan bool)
 
 	stats.total = &statsEntry{
@@ -105,33 +105,6 @@ func (s *requestStats) clearAll() {
 	s.startTime = time.Now().Unix()
 }
 
-func (s *requestStats) serializeStats() []interface{} {
-	entries := make([]interface{}, 0, len(s.entries))
-	for _, v := range s.entries {
-		if !(v.numRequests == 0 && v.numFailures == 0) {
-			entries = append(entries, v.getStrippedReport())
-		}
-	}
-	return entries
-}
-
-func (s *requestStats) serializeErrors() map[string]map[string]interface{} {
-	errors := make(map[string]map[string]interface{})
-	for k, v := range s.errors {
-		errors[k] = v.toMap()
-	}
-	return errors
-}
-
-func (s *requestStats) collectReportData() map[string]interface{} {
-	data := make(map[string]interface{})
-	data["stats"] = s.serializeStats()
-	data["stats_total"] = s.total.getStrippedReport()
-	data["errors"] = s.serializeErrors()
-	s.errors = make(map[string]*statsError)
-	return data
-}
-
 func (s *requestStats) start() {
 	go func() {
 		var ticker = time.NewTicker(slaveReportInterval)
@@ -144,9 +117,13 @@ func (s *requestStats) start() {
 			case <-s.clearStatsChan:
 				s.clearAll()
 			case <-ticker.C:
-				data := s.collectReportData()
 				// send data to channel, no network IO in this goroutine
-				s.messageToRunnerChan <- data
+				s.messageToRunnerChan <- s.entries
+				for _, v := range s.entries {
+					v.reset()
+				}
+				s.total.reset()
+				s.errors = make(map[string]*statsError)
 			case <-s.shutdownChan:
 				return
 			}
@@ -249,29 +226,6 @@ func (s *statsEntry) logResponseTime(responseTime int64) {
 
 func (s *statsEntry) logError(err string) {
 	s.numFailures++
-}
-
-func (s *statsEntry) serialize() map[string]interface{} {
-	result := make(map[string]interface{})
-	result["name"] = s.name
-	result["method"] = s.method
-	result["last_request_timestamp"] = s.lastRequestTimestamp
-	result["start_time"] = s.startTime
-	result["num_requests"] = s.numRequests
-	result["num_failures"] = s.numFailures
-	result["total_response_time"] = s.totalResponseTime
-	result["max_response_time"] = s.maxResponseTime
-	result["min_response_time"] = s.minResponseTime
-	result["total_content_length"] = s.totalContentLength
-	result["response_times"] = s.responseTimes
-	result["num_reqs_per_sec"] = s.numReqsPerSec
-	return result
-}
-
-func (s *statsEntry) getStrippedReport() map[string]interface{} {
-	report := s.serialize()
-	s.reset()
-	return report
 }
 
 type statsError struct {

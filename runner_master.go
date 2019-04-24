@@ -83,20 +83,21 @@ func (r *MasterRunner) run() {
 	r.client.sendChannel() <- newMessage("client_ready", nil, r.nodeID)
 
 	// report to master
-	go func() {
-		for {
-			select {
-			case data := <-r.stats.messageToRunnerChan:
-				if r.state == stateInit || r.state == stateStopped {
-					continue
-				}
-				data["user_count"] = r.numClients
-				r.client.sendChannel() <- newMessage("stats", data, r.nodeID)
-			case <-r.closeChan:
-				return
-			}
-		}
-	}()
+	// TODO reintroduce serialisation logic deleted from stats.go
+	// go func() {
+	// 	for {
+	// 		select {
+	// 		case data := <-r.stats.messageToRunnerChan:
+	// 			if r.state == stateInit || r.state == stateStopped {
+	// 				continue
+	// 			}
+	// 			data["user_count"] = r.numClients
+	// 			r.client.sendChannel() <- newMessage("stats", data, r.nodeID)
+	// 		case <-r.closeChan:
+	// 			return
+	// 		}
+	// 	}
+	// }()
 
 	// heartbeat
 	// See: https://github.com/locustio/locust/commit/a8c0d7d8c588f3980303358298870f2ea394ab93
