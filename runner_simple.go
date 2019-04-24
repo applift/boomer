@@ -93,7 +93,7 @@ func (r *SimpleRunner) logStats(stats map[string]statsEntry) {
 			avgRespTime = sts.totalResponseTime / sts.numRequests
 		}
 
-		fmt.Printf("%s: request rate: %d, avg response time: %d", sts.name, avgReqPerSec, avgRespTime)
+		fmt.Printf("%s: request rate: %d, avg response time: %d\n", sts.name, avgReqPerSec, avgRespTime)
 	}
 }
 
