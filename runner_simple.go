@@ -99,7 +99,14 @@ func logStats(stats map[string]interface{}) {
 		avgRespTime = total / count
 	}
 
-	fmt.Println("Current request rate:", avgReqPerSec, ", avg response time:", avgRespTime, "ms")
+	var fromTotalAvgRespTime int64
+	if statsTotal["num_requests"].(int64) == 0 {
+		fromTotalAvgRespTime = 0
+	} else {
+		fromTotalAvgRespTime = statsTotal["total_response_time"].(int64) / statsTotal["num_requests"].(int64)
+	}
+
+	fmt.Println("Current request rate:", avgReqPerSec, ", avg response time:", avgRespTime, "ms, (", fromTotalAvgRespTime, "ms)")
 }
 
 func (r *SimpleRunner) recordSuccess(requestType, name string, responseTime int64, responseLength int64) {
