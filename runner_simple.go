@@ -150,11 +150,12 @@ func (r *SimpleRunner) pickWeightedRandomTask() *Task {
 		weightSum += t.Weight
 	}
 
-	remainingWeight := rand.Intn(weightSum)
+	remainingWeight := rand.Intn(weightSum) + 1
 
 	var task *Task
 	for _, t := range r.tasks {
-		if remainingWeight = remainingWeight - t.Weight; remainingWeight <= 0 {
+		remainingWeight = remainingWeight - t.Weight
+		if remainingWeight <= 0 {
 			task = t
 			break
 		}
