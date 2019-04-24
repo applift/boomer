@@ -169,6 +169,7 @@ func (r *SimpleRunner) getMaxWorkers() (workers int) {
 		panic(fmt.Sprintf("Error Getting Rlimit: %s", err))
 	}
 
+	workers = int(r.requestRate)
 	if r.maxWorkers > 0 {
 		workers = int(math.Min(float64(r.maxWorkers), float64(r.requestRate)))
 	}
