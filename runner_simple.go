@@ -38,7 +38,7 @@ func (r *SimpleRunner) run() {
 		for {
 			select {
 			case data := <-r.stats.messageToRunnerChan:
-				logStats(data)
+				r.logStats(data)
 			case <-r.stopChan:
 				return
 			}
@@ -60,7 +60,7 @@ func (r *SimpleRunner) run() {
 	}
 }
 
-func logStats(stats map[string]interface{}) {
+func (r *SimpleRunner) logStats(stats map[string]interface{}) {
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -68,31 +68,34 @@ func logStats(stats map[string]interface{}) {
 		}
 	}()
 
-	var statsTotal = stats["stats_total"].(map[string]interface{})
-	var reqPerSec = statsTotal["num_reqs_per_sec"].(map[int64]int64)
+	for _, sts := range stats {
+		println(stats)
+		var stsMap = sts.(map[string]interface{})
+		var reqPerSec = stsMap["num_reqs_per_sec"].(map[int64]int64)
 
-	var total int64
-	var count int64
-	for _, v := range reqPerSec {
-		count++
-		total += v
+		var total int64
+		var count int64
+		for _, v := range reqPerSec {
+			count++
+			total += v
+		}
+
+		var avgReqPerSec int64
+		if count == 0 {
+			avgReqPerSec = 0
+		} else {
+			avgReqPerSec = total / count
+		}
+
+		var avgRespTime int64
+		if stsMap["num_requests"].(int64) == 0 {
+			avgRespTime = 0
+		} else {
+			avgRespTime = stsMap["total_response_time"].(int64) / stsMap["num_requests"].(int64)
+		}
+
+		fmt.Printf("%s: request rate: %d, avg response time: %d", stsMap["name"], avgReqPerSec, avgRespTime)
 	}
-
-	var avgReqPerSec int64
-	if count == 0 {
-		avgReqPerSec = 0
-	} else {
-		avgReqPerSec = total / count
-	}
-
-	var avgRespTime int64
-	if statsTotal["num_requests"].(int64) == 0 {
-		avgRespTime = 0
-	} else {
-		avgRespTime = statsTotal["total_response_time"].(int64) / statsTotal["num_requests"].(int64)
-	}
-
-	fmt.Println("Current request rate:", avgReqPerSec, ", avg response time:", avgRespTime, "ms")
 }
 
 func (r *SimpleRunner) recordSuccess(requestType, name string, responseTime int64, responseLength int64) {
