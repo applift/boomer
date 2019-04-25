@@ -62,6 +62,10 @@ func (b *Boomer) Quit() {
 	b.runner.close()
 }
 
+func (b *Boomer) Stop() {
+	b.runner.close()
+}
+
 // Run tasks without connecting to the master.
 func runTasksForTest(tasks ...*Task) {
 	taskNames := strings.Split(runTasks, ",")
@@ -135,6 +139,10 @@ func Run(r Runner, tasks ...*Task) {
 //convenience function for the defaultBoomer.
 func Quit() {
 	defaultBoomer.Quit()
+}
+
+func Stop() {
+	defaultBoomer.Stop()
 }
 
 // RecordSuccess reports a success.

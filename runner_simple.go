@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const StatsReportFile = "report.csv"
+
 type SimpleRunner struct {
 	tasks       []*Task
 	rateLimiter RateLimiter
@@ -34,12 +36,19 @@ func NewSimpleRunner(tasks []*Task) *Runner {
 func (r *SimpleRunner) run() {
 	r.stats.start()
 
+	statsReportFile := r.createStatsReport()
+	if statsReportFile != nil {
+		_, _ = statsReportFile.WriteString("time,name,rps,avg resp. time,max resp. time,min resp. time,num req,num failures\n")
+	}
 	go func() {
 		for {
 			select {
 			case data := <-r.stats.messageToRunnerChan:
-				r.logStats(data)
+				r.logStats(data, statsReportFile)
 			case <-r.stopChan:
+				if statsReportFile != nil {
+					statsReportFile.Close()
+				}
 				return
 			}
 		}
@@ -60,7 +69,21 @@ func (r *SimpleRunner) run() {
 	}
 }
 
-func (r *SimpleRunner) logStats(stats map[string]statsEntry) {
+func (r *SimpleRunner) createStatsReport() *os.File {
+	if _, err := os.Stat(StatsReportFile); err == nil {
+		err = os.Remove(StatsReportFile)
+		if err != nil {
+			fmt.Printf("Unable to remove file: %s\n", StatsReportFile)
+		}
+	}
+	file, err := os.Create(StatsReportFile)
+	if err != nil {
+		fmt.Printf("Error while creating file: %v\n", err.Error())
+	}
+	return file
+}
+
+func (r *SimpleRunner) logStats(stats map[string]statsEntry, statsReport *os.File) {
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -94,6 +117,9 @@ func (r *SimpleRunner) logStats(stats map[string]statsEntry) {
 		}
 
 		fmt.Printf("%s: request rate: %d, avg response time: %d\n", sts.name, avgReqPerSec, avgRespTime)
+		if statsReport != nil {
+			_, _ = statsReport.WriteString(fmt.Sprintf("%s,%s,%d,%d,%d,%d,%d,%d\n", time.Now().Format(time.RFC3339), sts.name, avgReqPerSec, avgRespTime, sts.maxResponseTime, sts.minResponseTime, sts.numRequests, sts.numFailures))
+		}
 	}
 }
 
